@@ -10,9 +10,20 @@ public class CorsConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOriginPatterns("http://localhost:3000") // ✅ FIX
+
+                // ✅ Allowed Frontend URLs
+                .allowedOrigins(
+                        "http://localhost:3000",
+                        "https://mock-interview-x-frontend-s1pi.vercel.app"
+                )
+
+                // ✅ Methods allowed
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+
+                // ✅ Headers allowed
                 .allowedHeaders("*")
+
+                // ✅ Important for cookies / auth
                 .allowCredentials(true);
     }
 }

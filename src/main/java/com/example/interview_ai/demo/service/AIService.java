@@ -14,7 +14,7 @@ import java.util.*;
 @Service
 public class AIService {
 
-    @Value("${ai.api.key}")
+    @Value("${AI_API_KEY}")
     private String API_KEY;
 
     @Value("${ai.api.url}")
@@ -43,7 +43,8 @@ public class AIService {
                         "  \"example2\": { \"input\": \"\", \"output\": \"\" },\n" +
                         "  \"constraints\": [\"\", \"\"]\n" +
                         "}";
-
+        System.out.println("HEYYYAAA , GENERATED PROMPT");
+        System.out.println("Heyyaa ,api key is"+API_KEY);
         String aiResponse = callAI(prompt);
 
         // 🔥 CLEAN RESPONSE (IMPORTANT FIX)

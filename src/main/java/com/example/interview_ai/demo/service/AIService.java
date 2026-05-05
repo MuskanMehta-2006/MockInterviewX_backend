@@ -14,7 +14,7 @@ import java.util.*;
 @Service
 public class AIService {
 
-    @Value("${AI_API_KEY}")
+    @Value("${ai.api.key}")
     private String API_KEY;
 
     @Value("${ai.api.url}")

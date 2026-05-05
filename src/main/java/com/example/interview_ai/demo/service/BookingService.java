@@ -98,6 +98,7 @@ public class BookingService {
 
         // 3. STATUS SET
         booking.setStatus("CONFIRMED");
+        System.out.println("Status confirmed");
 
         // 4. SAVE BOOKING
         Booking saved = bookingRepository.save(booking);

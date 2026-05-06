@@ -183,7 +183,8 @@ public class AuthService {
             mailSender.send(message);
 
         } catch (Exception e) {
-            throw new RuntimeException("Failed to send OTP email");
+            e.printStackTrace();
+            throw new RuntimeException("Failed: " + e.getMessage());
         }
 
         return "OTP sent successfully";

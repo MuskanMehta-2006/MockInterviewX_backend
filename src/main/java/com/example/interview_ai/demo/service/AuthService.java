@@ -15,6 +15,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.*;
 
 @Service
 public class AuthService {
@@ -22,8 +24,6 @@ public class AuthService {
     @Autowired
     private UserRepository userRepository;
 
-    @Autowired
-    private JavaMailSender mailSender;
 
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
@@ -117,9 +117,6 @@ public class AuthService {
     // ===============================
     public String sendOtp(String email, String role, String type) {
 
-        // 🔍 Find user
-        System.out.println(System.getenv("MAIL_USERNAME"));
-        System.out.println(System.getenv("MAIL_PASSWORD"));
         Optional<User> optionalUser = userRepository.findByEmail(email);
 
         // ================= REGISTER =================
@@ -129,13 +126,9 @@ public class AuthService {
 
                 User existingUser = optionalUser.get();
 
-                // ❌ Same role
                 if (existingUser.getRole().equals(role)) {
                     throw new RuntimeException("You are already registered");
-                }
-
-                // ❌ Different role
-                else {
+                } else {
                     throw new RuntimeException("This email is registered with another role");
                 }
             }
@@ -144,14 +137,12 @@ public class AuthService {
         // ================= FORGOT =================
         if (type.equals("FORGOT")) {
 
-            // ❌ Not registered
             if (optionalUser.isEmpty()) {
                 throw new RuntimeException("This email is not registered");
             }
 
             User existingUser = optionalUser.get();
 
-            // ❌ Role mismatch
             if (!existingUser.getRole().equals(role)) {
                 throw new RuntimeException("This email is registered with another role");
             }
@@ -163,26 +154,41 @@ public class AuthService {
         otpStore.put(email, otp);
         expiryStore.put(email, LocalDateTime.now().plusMinutes(5));
 
+        // ================= SEND EMAIL USING RESEND =================
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true);
 
-            helper.setTo(email);
-            helper.setSubject("MockInterviewX - OTP Verification");
+            String apiUrl = "https://api.resend.com/emails";
 
             String htmlBody =
-                    "<div style='font-family:Arial;padding:20px'>"
-                            + "<h2>MockInterviewX</h2>"
-                            + "<p>Your OTP is:</p>"
-                            + "<div style='font-size:22px;font-weight:bold;padding:10px;border:1px solid #ccc;display:inline-block;'>"
-                            + otp +
-                            "</div>"
-                            + "<p>Valid for 5 minutes only</p>"
-                            + "</div>";
+                    "<div style='font-family:Arial;padding:20px'>" +
+                            "<h2>MockInterviewX</h2>" +
+                            "<p>Your OTP is:</p>" +
+                            "<div style='font-size:22px;font-weight:bold;padding:10px;border:1px solid #ccc;display:inline-block;'>" +
+                            otp +
+                            "</div>" +
+                            "<p>Valid for 5 minutes only</p>" +
+                            "</div>";
 
-            helper.setText(htmlBody, true);
+            String requestBody = """
+        {
+          "from": "MockInterviewX <onboarding@resend.dev>",
+          "to": ["%s"],
+          "subject": "MockInterviewX - OTP Verification",
+          "html": "%s"
+        }
+        """.formatted(email, htmlBody.replace("\"", "\\\""));
 
-            mailSender.send(message);
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(System.getenv("RESEND_API_KEY"));
+
+            org.springframework.http.HttpEntity<String> request =
+                    new org.springframework.http.HttpEntity<>(requestBody, headers);
+
+            org.springframework.web.client.RestTemplate restTemplate =
+                    new org.springframework.web.client.RestTemplate();
+
+            restTemplate.postForEntity(apiUrl, request, String.class);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -191,23 +197,36 @@ public class AuthService {
 
         return "OTP sent successfully";
     }
-
     // ===============================
     // VERIFY OTP
     // ===============================
     public boolean verifyOtp(String email, String otp) {
 
-        if (!otpStore.containsKey(email)) return false;
+        // ❌ no OTP generated
+        if (!otpStore.containsKey(email)) {
+            return false;
+        }
 
-        if (expiryStore.get(email).isBefore(LocalDateTime.now())) {
+        // ⏰ check expiry safely
+        LocalDateTime expiryTime = expiryStore.get(email);
+
+        if (expiryTime == null || expiryTime.isBefore(LocalDateTime.now())) {
             otpStore.remove(email);
             expiryStore.remove(email);
             return false;
         }
 
-        return otpStore.get(email).equals(otp);
-    }
+        // 🔐 check OTP match
+        boolean isValid = otpStore.get(email).equals(otp);
 
+        // 🧹 cleanup after success (important security fix)
+        if (isValid) {
+            otpStore.remove(email);
+            expiryStore.remove(email);
+        }
+
+        return isValid;
+    }
     // ===============================
     // RESET PASSWORD
     // ===============================

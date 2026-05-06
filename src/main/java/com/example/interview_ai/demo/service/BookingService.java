@@ -7,8 +7,10 @@ import jakarta.mail.internet.MimeMessage;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -27,9 +29,6 @@ public class BookingService {
 
     @Autowired
     private BookingRepository bookingRepository;
-
-    @Autowired
-    private JavaMailSender mailSender;
 
     // =========================================
     // 🔥 CREATE ORDER
@@ -125,38 +124,56 @@ public class BookingService {
     private void sendEmail(String to, Booking booking, String subject) {
 
         try {
+
             System.out.println("📧 EMAIL PROCESS STARTED");
             System.out.println("➡️ Sending to: " + to);
             System.out.println("➡️ Subject: " + subject);
-            System.out.println("➡️ Date: " + booking.getDate());
-            System.out.println("➡️ Slot: " + booking.getSelectedSlot());
-            System.out.println("➡️ MeetLink: " + booking.getMeetLink());
-
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true);
-
-            helper.setTo(to);
-            helper.setSubject(subject);
 
             String html =
                     "<div style='font-family:Arial;padding:20px'>" +
-                            "<h2>Interview Booking Confirmed</h2>" +
+                            "<h2>Interview Booking Confirmed 🚀</h2>" +
                             "<p><b>Date:</b> " + booking.getDate() + "</p>" +
                             "<p><b>Time Slot:</b> " + booking.getSelectedSlot() + "</p>" +
                             "<p><b>Meet Link:</b> <a href='" + booking.getMeetLink() + "'>Join Meeting</a></p>" +
-                            "<br><p>All the best 🚀</p>" +
+                            "<br><p>All the best 💪</p>" +
                             "</div>";
 
-            helper.setText(html, true);
+            String requestBody = """
+        {
+          "from": "MockInterviewX <onboarding@resend.dev>",
+          "to": ["%s"],
+          "subject": "%s",
+          "html": "%s"
+        }
+        """.formatted(
+                    to,
+                    subject,
+                    html.replace("\"", "\\\"")
+            );
 
-            mailSender.send(message);
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(System.getenv("RESEND_API_KEY"));
+
+            org.springframework.http.HttpEntity<String> request =
+                    new org.springframework.http.HttpEntity<>(requestBody, headers);
+
+            org.springframework.web.client.RestTemplate restTemplate =
+                    new org.springframework.web.client.RestTemplate();
+
+            restTemplate.postForEntity(
+                    "https://api.resend.com/emails",
+                    request,
+                    String.class
+            );
+
+            System.out.println("✅ EMAIL SENT SUCCESSFULLY");
 
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Email failed: " + e.getMessage());
         }
     }
-
     // =========================================
     // 🔥 MEET LINK GENERATOR
     // =========================================

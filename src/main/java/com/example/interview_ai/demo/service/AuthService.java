@@ -15,8 +15,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.http.*;
 
 @Service
 public class AuthService {
@@ -24,6 +22,8 @@ public class AuthService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private JavaMailSender mailSender;
 
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
@@ -113,11 +113,11 @@ public class AuthService {
 
         return res;
     }
+    // SEND OTP (EMAIL HTML FORMAT)
+    // ===============================
     public String sendOtp(String email, String role, String type) {
-        System.out.println("BREVO KEY = " + System.getenv("BREVO_API_KEY"));
-        System.out.println("BREVO user = " + System.getenv("BREVO_SENDER_EMAIL"));
 
-
+        // 🔍 Find user
         Optional<User> optionalUser = userRepository.findByEmail(email);
 
         // ================= REGISTER =================
@@ -127,9 +127,13 @@ public class AuthService {
 
                 User existingUser = optionalUser.get();
 
+                // ❌ Same role
                 if (existingUser.getRole().equals(role)) {
                     throw new RuntimeException("You are already registered");
-                } else {
+                }
+
+                // ❌ Different role
+                else {
                     throw new RuntimeException("This email is registered with another role");
                 }
             }
@@ -138,12 +142,14 @@ public class AuthService {
         // ================= FORGOT =================
         if (type.equals("FORGOT")) {
 
+            // ❌ Not registered
             if (optionalUser.isEmpty()) {
                 throw new RuntimeException("This email is not registered");
             }
 
             User existingUser = optionalUser.get();
 
+            // ❌ Role mismatch
             if (!existingUser.getRole().equals(role)) {
                 throw new RuntimeException("This email is registered with another role");
             }
@@ -155,98 +161,48 @@ public class AuthService {
         otpStore.put(email, otp);
         expiryStore.put(email, LocalDateTime.now().plusMinutes(5));
 
-        // ================= BREVO EMAIL =================
         try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true);
 
-            String html =
-                    "<div style='font-family:Arial;padding:20px'>" +
-                            "<h2>MockInterviewX 🔐</h2>" +
-                            "<p>Your OTP is:</p>" +
-                            "<div style='font-size:22px;font-weight:bold;padding:10px;border:1px solid #ccc;display:inline-block;'>" +
-                            otp +
-                            "</div>" +
-                            "<p>Valid for 5 minutes only</p>" +
-                            "</div>";
+            helper.setTo(email);
+            helper.setSubject("MockInterviewX - OTP Verification");
 
-            String safeHtml = html
-                    .replace("\\", "\\\\")
-                    .replace("\"", "\\\"")
-                    .replace("\n", "");
+            String htmlBody =
+                    "<div style='font-family:Arial;padding:20px'>"
+                            + "<h2>MockInterviewX</h2>"
+                            + "<p>Your OTP is:</p>"
+                            + "<div style='font-size:22px;font-weight:bold;padding:10px;border:1px solid #ccc;display:inline-block;'>"
+                            + otp +
+                            "</div>"
+                            + "<p>Valid for 5 minutes only</p>"
+                            + "</div>";
 
-            String requestBody = """
-        {
-          "sender": {
-            "name": "MockInterviewX",
-            "email": "%s"
-          },
-          "to": [
-            {
-              "email": "%s"
-            }
-          ],
-          "subject": "MockInterviewX - OTP Verification",
-          "htmlContent": "%s"
-        }
-        """.formatted(
-                    System.getenv("BREVO_SENDER_EMAIL"),
-                    email,
-                    safeHtml
-            );
+            helper.setText(htmlBody, true);
 
-            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
-            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
-            headers.set("api-key", System.getenv("BREVO_API_KEY"));
-
-            org.springframework.http.HttpEntity<String> request =
-                    new org.springframework.http.HttpEntity<>(requestBody, headers);
-
-            org.springframework.web.client.RestTemplate restTemplate =
-                    new org.springframework.web.client.RestTemplate();
-
-            restTemplate.postForEntity(
-                    "https://api.brevo.com/v3/smtp/email",
-                    request,
-                    String.class
-            );
+            mailSender.send(message);
 
         } catch (Exception e) {
-            e.printStackTrace();
-            throw new RuntimeException("Failed to send OTP email: " + e.getMessage());
+            throw new RuntimeException("Failed to send OTP email");
         }
 
         return "OTP sent successfully";
     }
+
     // ===============================
     // VERIFY OTP
     // ===============================
     public boolean verifyOtp(String email, String otp) {
 
-        // ❌ no OTP found
-        if (email == null || otp == null || !otpStore.containsKey(email)) {
-            return false;
-        }
+        if (!otpStore.containsKey(email)) return false;
 
-        // ⏰ expiry check
-        LocalDateTime expiryTime = expiryStore.get(email);
-
-        if (expiryTime == null || expiryTime.isBefore(LocalDateTime.now())) {
+        if (expiryStore.get(email).isBefore(LocalDateTime.now())) {
             otpStore.remove(email);
             expiryStore.remove(email);
             return false;
         }
 
-        // 🔐 OTP match check
-        String storedOtp = otpStore.get(email);
-
-        boolean isValid = storedOtp.equals(otp);
-
-        // 🧹 cleanup (security best practice)
-        if (isValid) {
-            otpStore.remove(email);
-            expiryStore.remove(email);
-        }
-
-        return isValid;
+        return otpStore.get(email).equals(otp);
     }
 
     // ===============================

@@ -113,8 +113,6 @@ public class AuthService {
 
         return res;
     }
-    // SEND OTP (EMAIL HTML FORMAT)
-    // ===============================
     public String sendOtp(String email, String role, String type) {
 
         Optional<User> optionalUser = userRepository.findByEmail(email);
@@ -154,14 +152,12 @@ public class AuthService {
         otpStore.put(email, otp);
         expiryStore.put(email, LocalDateTime.now().plusMinutes(5));
 
-        // ================= SEND EMAIL USING RESEND =================
+        // ================= BREVO EMAIL =================
         try {
 
-            String apiUrl = "https://api.resend.com/emails";
-
-            String htmlBody =
+            String html =
                     "<div style='font-family:Arial;padding:20px'>" +
-                            "<h2>MockInterviewX</h2>" +
+                            "<h2>MockInterviewX 🔐</h2>" +
                             "<p>Your OTP is:</p>" +
                             "<div style='font-size:22px;font-weight:bold;padding:10px;border:1px solid #ccc;display:inline-block;'>" +
                             otp +
@@ -169,18 +165,34 @@ public class AuthService {
                             "<p>Valid for 5 minutes only</p>" +
                             "</div>";
 
+            String safeHtml = html
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "");
+
             String requestBody = """
         {
-          "from": "MockInterviewX <onboarding@resend.dev>",
-          "to": ["%s"],
+          "sender": {
+            "name": "MockInterviewX",
+            "email": "%s"
+          },
+          "to": [
+            {
+              "email": "%s"
+            }
+          ],
           "subject": "MockInterviewX - OTP Verification",
-          "html": "%s"
+          "htmlContent": "%s"
         }
-        """.formatted(email, htmlBody.replace("\"", "\\\""));
+        """.formatted(
+                    System.getenv("BREVO_SENDER_EMAIL"),
+                    email,
+                    safeHtml
+            );
 
             org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
             headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(System.getenv("RESEND_API_KEY"));
+            headers.set("api-key", System.getenv("BREVO_API_KEY"));
 
             org.springframework.http.HttpEntity<String> request =
                     new org.springframework.http.HttpEntity<>(requestBody, headers);
@@ -188,7 +200,11 @@ public class AuthService {
             org.springframework.web.client.RestTemplate restTemplate =
                     new org.springframework.web.client.RestTemplate();
 
-            restTemplate.postForEntity(apiUrl, request, String.class);
+            restTemplate.postForEntity(
+                    "https://api.brevo.com/v3/smtp/email",
+                    request,
+                    String.class
+            );
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -202,12 +218,12 @@ public class AuthService {
     // ===============================
     public boolean verifyOtp(String email, String otp) {
 
-        // ❌ no OTP generated
-        if (!otpStore.containsKey(email)) {
+        // ❌ no OTP found
+        if (email == null || otp == null || !otpStore.containsKey(email)) {
             return false;
         }
 
-        // ⏰ check expiry safely
+        // ⏰ expiry check
         LocalDateTime expiryTime = expiryStore.get(email);
 
         if (expiryTime == null || expiryTime.isBefore(LocalDateTime.now())) {
@@ -216,10 +232,12 @@ public class AuthService {
             return false;
         }
 
-        // 🔐 check OTP match
-        boolean isValid = otpStore.get(email).equals(otp);
+        // 🔐 OTP match check
+        String storedOtp = otpStore.get(email);
 
-        // 🧹 cleanup after success (important security fix)
+        boolean isValid = storedOtp.equals(otp);
+
+        // 🧹 cleanup (security best practice)
         if (isValid) {
             otpStore.remove(email);
             expiryStore.remove(email);
@@ -227,6 +245,7 @@ public class AuthService {
 
         return isValid;
     }
+    
     // ===============================
     // RESET PASSWORD
     // ===============================

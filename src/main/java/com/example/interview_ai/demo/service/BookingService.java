@@ -125,9 +125,8 @@ public class BookingService {
 
         try {
 
-            System.out.println("📧 EMAIL PROCESS STARTED");
-            System.out.println("➡️ Sending to: " + to);
-            System.out.println("➡️ Subject: " + subject);
+            System.out.println("📧 BREVO EMAIL STARTED");
+            System.out.println("➡️ To: " + to);
 
             String html =
                     "<div style='font-family:Arial;padding:20px'>" +
@@ -140,20 +139,28 @@ public class BookingService {
 
             String requestBody = """
         {
-          "from": "MockInterviewX <onboarding@resend.dev>",
-          "to": ["%s"],
+          "sender": {
+            "name": "MockInterviewX",
+            "email": "%s"
+          },
+          "to": [
+            {
+              "email": "%s"
+            }
+          ],
           "subject": "%s",
-          "html": "%s"
+          "htmlContent": "%s"
         }
         """.formatted(
+                    System.getenv("BREVO_SENDER_EMAIL"),
                     to,
                     subject,
-                    html.replace("\"", "\\\"")
+                    html.replace("\"", "\\\"").replace("\n", "")
             );
 
             org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
             headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(System.getenv("RESEND_API_KEY"));
+            headers.set("api-key", System.getenv("BREVO_API_KEY"));
 
             org.springframework.http.HttpEntity<String> request =
                     new org.springframework.http.HttpEntity<>(requestBody, headers);
@@ -162,7 +169,7 @@ public class BookingService {
                     new org.springframework.web.client.RestTemplate();
 
             restTemplate.postForEntity(
-                    "https://api.resend.com/emails",
+                    "https://api.brevo.com/v3/smtp/email",
                     request,
                     String.class
             );

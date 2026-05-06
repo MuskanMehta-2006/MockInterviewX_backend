@@ -118,6 +118,8 @@ public class AuthService {
     public String sendOtp(String email, String role, String type) {
 
         // 🔍 Find user
+        System.out.println(System.getenv("MAIL_USERNAME"));
+        System.out.println(System.getenv("MAIL_PASSWORD"));
         Optional<User> optionalUser = userRepository.findByEmail(email);
 
         // ================= REGISTER =================
@@ -183,7 +185,8 @@ public class AuthService {
             mailSender.send(message);
 
         } catch (Exception e) {
-            throw new RuntimeException("Failed to send OTP email");
+            e.printStackTrace();
+            throw new RuntimeException("Failed to send OTP email: " + e.getMessage());
         }
 
         return "OTP sent successfully";

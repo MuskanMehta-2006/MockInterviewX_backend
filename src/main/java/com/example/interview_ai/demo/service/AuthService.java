@@ -114,6 +114,9 @@ public class AuthService {
         return res;
     }
     public String sendOtp(String email, String role, String type) {
+        System.out.println("BREVO KEY = " + System.getenv("BREVO_API_KEY"));
+        System.out.println("BREVO user = " + System.getenv("BREVO_SENDER_EMAIL"));
+
 
         Optional<User> optionalUser = userRepository.findByEmail(email);
 
@@ -245,7 +248,7 @@ public class AuthService {
 
         return isValid;
     }
-    
+
     // ===============================
     // RESET PASSWORD
     // ===============================
